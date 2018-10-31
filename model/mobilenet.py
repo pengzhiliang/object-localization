@@ -3,6 +3,7 @@ import torch.nn.functional as F
 
 
 class MobileNet(nn.Module):
+    # input 3*128*128 output 1024*4*4
     def __init__(self, num_classes=1024):
         super(MobileNet, self).__init__()
         self.num_classes = num_classes

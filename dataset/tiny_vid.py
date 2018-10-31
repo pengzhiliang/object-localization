@@ -84,7 +84,8 @@ class tiny_vid_loader(data.Dataset):
 		imgpath = self.filelist[index]
 		img = Image.open(imgpath).convert('RGB')
 		img = self.transform(img)
-		class_gt = np.array(self.class_coor[index])
+		class_gt = np.array(self.class_coor[index])/128.
+		class_gt = torch.tensor(class_gt)
 		return img,class_gt
 
 	def __len__(self):
