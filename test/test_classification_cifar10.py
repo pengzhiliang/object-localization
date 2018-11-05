@@ -7,7 +7,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
+import sys
+sys.path.insert(0,'../')
 
 import torchvision
 from torchvision import datasets, models, transforms

@@ -32,6 +32,10 @@ from model import MobileNet
 from metrics import compute_acc,averageMeter,compute_IoU,compute_class_acc
 from dataset import tiny_vid_loader
 
+import sys
+sys.path.insert(0,'../')
+
+
 def get_mobilenet_model(pretain = True,num_classes = 5,requires_grad = True):
 	# 返回去掉了全连接层的mobilenet
 	model = MobileNet()

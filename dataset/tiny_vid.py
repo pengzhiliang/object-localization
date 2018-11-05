@@ -15,14 +15,20 @@ from torchvision import transforms
 from os.path import join as pjoin
 # from augmentation import SSDAugmentation
 
+#=============================================================================
+#
+#           Create train_images.txt and test_images.txt
+#
+#=============================================================================
 def train_test_txt(defualt_path='/home/pzl/Data/tiny_vid'):
     """
     将如下格式存入文件：
-        /home/pzl/Data/tiny_vid/turtle/000151.JPEG  2   29 38 108 84
+        /home/pzl/Data/tiny_vid/turtle/000151.JPEG  1  29 38 108 84 2
     其中参数：
         /home/pzl/Data/tiny_vid/turtle/000151.JPEG：图片路径
-        2 ： 种类
+        1 ： 一个物体（方便使用ssd架构）
         29 38 108 84：分别为 xmin, ymin, xmax, ymax，表示bounding box的位置
+        2 ： 种类
     """
     classes = {'car':0, 'bird':1, 'turtle':2, 'dog':3, 'lizard':4}
     for dirname in classes.keys():
@@ -51,6 +57,12 @@ def train_test_txt(defualt_path='/home/pzl/Data/tiny_vid'):
                 imageclass = str(classes[dirname])
                 imgbbox = ' '.join(bbox_dic[str(i)])
                 f.write('\t'.join([imgpath,'1',imgbbox,imageclass])+'\n')
+
+#=============================================================================
+#
+#           display a image with boundingbox and class
+#
+#=============================================================================
 def dis_gt(img ,name , coor ):
     """
     功能：在输入的Image上加上bounding box
@@ -77,6 +89,11 @@ def dis_gt(img ,name , coor ):
     plt.imshow(img)
     plt.show()
 
+#=============================================================================
+#
+#           Create a data loader for two-output net(not ssd),don't need to encode
+#
+#=============================================================================
 class tiny_vid_loader(data.Dataset):
     """
     功能：
@@ -84,7 +101,9 @@ class tiny_vid_loader(data.Dataset):
     参数：
 
     """
-    def __init__(self,defualt_path='/home/pzl/Data/tiny_vid',mode='train',transform=None):#SSDAugmentation(size=128)):
+    img_size =128
+
+    def __init__(self,defualt_path='/home/pzl/Data/tiny_vid',mode='train',transform=None):
         """
         defualt_path: 如'/home/pzl/Data/tiny_vid'
         mode : 'train' or 'test'
@@ -93,45 +112,115 @@ class tiny_vid_loader(data.Dataset):
             train_test_txt(defualt_path)
         self.filelist=[]
         self.class_coor = []
+        self.mode = True if mode =='train' else False
+        # /home/pzl/Data/tiny_vid/turtle/000151.JPEG  1  29 38 108 84 2
         with open(pjoin(defualt_path,mode+'_images.txt')) as f:
             for line in f.readlines():
                 line = line.strip().split()
                 self.filelist.append(line[0])
                 self.class_coor.append([int(i) for i in line[2:]])
-        self.transform_default = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-        
+        self.ToTensor = transforms.ToTensor()
+        self.Normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        self.data_encoder = DataEncoder()
         self.transform = transform
 
+    def random_flip(self, img, boxes):
+        '''Randomly flip the image and adjust the bbox locations.
+        只在水平方向翻转
+        For bbox (xmin, ymin, xmax, ymax), the flipped bbox is:
+        (w-xmax, ymin, w-xmin, ymax).
+
+        Args:
+          img: (PIL.Image) image.
+          boxes: (tensor) bbox locations, sized [#obj, 4].
+
+        Returns:
+          img: (PIL.Image) randomly flipped image.
+          boxes: (tensor) randomly flipped bbox locations, sized [#obj, 4].
+        '''
+        if random.random() < 0.5:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            w = img.width
+            xmin = w - boxes[2]
+            xmax = w - boxes[0]
+            boxes[0] = xmin
+            boxes[2] = xmax
+        return img, boxes
+    def random_crop(self, img, boxes, labels):
+        '''Randomly crop the image and adjust the bbox locations.
+
+        For more details, see 'Chapter2.2: Data augmentation' of the paper.
+
+        Args:
+          img: (PIL.Image) image.
+          boxes: (tensor) bbox locations, sized [4,].
+          labels: (tensor) bbox labels, sized [1,].
+
+        Returns:
+          img: (PIL.Image) cropped image.
+          selected_boxes: (tensor) selected bbox locations.
+          labels: (tensor) selected bbox labels.
+        '''
+        imw, imh = img.size
+        boxes = torch.squeeze(boxes,dim=0) # expand [1,4]
+        while True:
+            min_iou = random.choice([None, 0.1, 0.3, 0.5, 0.7, 0.9])
+            if min_iou is None:
+                return img, boxes, labels
+
+            for _ in range(100):
+                # random.randrange(min,max)包含min 不包含max
+                w = random.randrange(int(0.1*imw), imw)
+                h = random.randrange(int(0.1*imh), imh)
+
+                if h > 2*w or w > 2*h:
+                    continue
+
+                x = random.randrange(imw - w)
+                y = random.randrange(imh - h)
+                roi = torch.Tensor([[x, y, x+w, y+h]])
+
+                center = (boxes[:,:2] + boxes[:,2:]) / 2  # [N,2]
+                roi2 = roi.expand(len(center), 4)  # [N,4]
+                mask = (center > roi2[:,:2]) & (center < roi2[:,2:])  # [N,2]
+                mask = mask[:,0] & mask[:,1]  #[N,]
+                if not mask.any():
+                    continue
+
+                selected_boxes = boxes.index_select(0, mask.nonzero().squeeze(1))
+
+                iou = self.data_encoder.iou(selected_boxes, roi)
+                if iou.min() < min_iou:
+                    continue
+
+                img = img.crop((x, y, x+w, y+h))
+                selected_boxes[:,0].add_(-x).clamp_(min=0, max=w)
+                selected_boxes[:,1].add_(-y).clamp_(min=0, max=h)
+                selected_boxes[:,2].add_(-x).clamp_(min=0, max=w)
+                selected_boxes[:,3].add_(-y).clamp_(min=0, max=h)
+                return img, selected_boxes, labels[mask]
 
     def __getitem__(self, index):
         imgpath = self.filelist[index]
         gt_class = np.array(self.class_coor[index][-1],dtype = np.int64)
         gt_bbox = np.array(self.class_coor[index][:-1],dtype = np.float32)
-        if  self.transform is None:
-            img = Image.open(imgpath).convert('RGB')
-            img = self.transform_default(img)
+        img = Image.open(imgpath).convert('RGB')
+        if  self.transform is not None:
+            gt_class , gt_bbox = self.ToTensor(gt_class),self.Tensor(gt_bbox)
+            if self.mode:
+                img , gt_bbox = self.random_flip(img,gt_bbox)
+                img, gt_bbox, gt_class = self.random_crop(img, gt_bbox, gt_class)
+            img = self.ToTensor(img)
+            img = self.Normalize(img)
         else:
-            # bgr
-            img = (cv2.imread(imgpath)).astype(np.float32)
-            gt_bbox = gt_bbox[np.newaxis,:]
-            # data augmentation
-            img,gt_bbox = self.transform(img,gt_bbox)
-            # print('img.shape:',img.shape)
-            # print('gt_bbox.shape',gt_bbox.shape)
-            # to rgb to Image
-            img = img[:, :, (2, 1, 0)]
-            img = Image.fromarray(np.uint8(img))
-            img = self.transform_default(img)
-            # print('img.size',img.size())
-
-            # to normalize
-        return img,torch.tensor(gt_class.astype(np.int64)),torch.tensor(gt_bbox.astype(np.float64))
+            img,gt_class , gt_bbox = self.ToTensor(img),self.ToTensor(gt_class),self.Tensor(gt_bbox)
+            img = self.Normalize(img)
+        return img,gt_class,gt_bbox
 
     def __len__(self):
         return len(self.filelist)
+
+
 class ListDataset(data.Dataset):
     img_size = 300
 
@@ -253,6 +342,7 @@ class ListDataset(data.Dataset):
                 return img, boxes, labels
 
             for _ in range(100):
+                # random.randrange(min,max)包含min 不包含max
                 w = random.randrange(int(0.1*imw), imw)
                 h = random.randrange(int(0.1*imh), imh)
 
@@ -286,24 +376,3 @@ class ListDataset(data.Dataset):
     def __len__(self):
         return self.num_samples
 
-if __name__ == '__main__':
-    target_classes = ['car', 'bird', 'turtle', 'dog', 'lizard']
-    dst = tiny_vid_loader()#transform = None)
-    trainloader = data.DataLoader(dst, batch_size=1)
-    for i, (img, gt_class,gt_bbox) in enumerate(trainloader):
-        if i % 150 == 0:
-            # print(gt_class)
-            # print(gt_bbox)
-            # print(img)
-            gt_class=gt_class.data.numpy()
-            gt_bbox = gt_bbox.data.numpy()[0]
-            inp = img.numpy()[0].transpose((1, 2, 0))
-            mean = np.array([0.485, 0.456, 0.406])
-            std = np.array([0.229, 0.224, 0.225])
-            inp = std * inp + mean
-            inp = np.clip(inp, 0, 1)*255
-            inp = Image.fromarray(inp.astype('uint8')).convert('RGB')
-            dis_gt(inp,target_classes[gt_class],gt_bbox)
-
-            # break
-    

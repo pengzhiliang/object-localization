@@ -17,15 +17,17 @@ def compute_IoU(boxes1, boxes2):
 	返回：
 		（n,）
 	"""
-	xA = torch.max(boxes1[:, 0], boxes2[:, 0])
-	yA = torch.max(boxes1[:, 1], boxes2[:, 1])
-	xB = torch.min(boxes1[:, 2], boxes2[:, 2])
-	yB = torch.min(boxes1[:, 3], boxes2[:, 3])
+	xA = torch.max(boxes1[:, 0], boxes2[:, 0]) #(N,)
+	yA = torch.max(boxes1[:, 1], boxes2[:, 1]) #(N,)
+	xB = torch.min(boxes1[:, 2], boxes2[:, 2]) #(N,)
+	yB = torch.min(boxes1[:, 3], boxes2[:, 3]) #(N,)
 	interArea = (xB - xA + 1) * (yB - yA + 1)
+	# 无交集，设为0
+	interArea[xA > xB] = 0 
+	
 	boxAArea = (boxes1[:,2] - boxes1[:,0] + 1) * (boxes1[:,3] - boxes1[:,1] + 1)
 	boxBArea = (boxes2[:,2] - boxes2[:,0] + 1) * (boxes2[:,3] - boxes2[:,1] + 1)
 	iou = interArea / (boxAArea + boxBArea - interArea)
-	iou[iou<0] = 0
 	return iou
 
 
@@ -39,9 +41,9 @@ def compute_iou_acc(in_class,gt_class,in_coor,gt_coor,theta=0.5):
 	"""
 	设置阈值为0.5  <0.5不将其算入分类准确率
 	参数：
-		in_class: 预测的class分类,(n,)
-		in_coor : 预测坐标, (n,4)
-		gt: groundtruth (n,5)
+		in_class: 预测的class分类,(n,) tensor
+		in_coor : 预测坐标, (n,4) tensor
+		gt: groundtruth (n,5) tensor
 	返回：
 		分类准确个数，IoU
 	"""

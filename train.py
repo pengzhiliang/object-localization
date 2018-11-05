@@ -108,7 +108,6 @@ def train(epoch,display=True):
 		train_reg_loss += r_loss.item()
 
 		class_acc,batch_IoU = compute_iou_acc(outputs_class,targets_class,outputs_reg,targets_reg,theta=0.5)
-		# _, predicted = outputs_class.max(dim=1)
 		total += targets_reg.size(0)
 		correct += class_acc
 		IoU += batch_IoU
