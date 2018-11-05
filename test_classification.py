@@ -4,7 +4,7 @@ Created on Oct 31,2018
 #
 #
 #
-#		TEST for classification
+#		TEST for classification using CIFAR10 datasets
 #
 #
 #
@@ -29,10 +29,8 @@ from torch.autograd import Variable
 from torchvision import datasets, models, transforms
 from torchsummary import summary
 from model import MobileNet
-from loss import multi_loss
 from metrics import compute_acc,averageMeter,compute_IoU,compute_class_acc
 from dataset import tiny_vid_loader
-
 
 def get_mobilenet_model(pretain = True,num_classes = 5,requires_grad = True):
 	# 返回去掉了全连接层的mobilenet
@@ -92,7 +90,7 @@ class Net(nn.Module):
 defualt_path = '/home/pzl/Data/tiny_vid'
 learning_rate = 1e-3
 batch_size = 32
-num_workers = 12
+num_workers = 4
 start_iter = 0
 end_iter = 1000
 test_interval = 10
@@ -106,7 +104,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # test_loader = tiny_vid_loader(defualt_path=defualt_path,mode='test')
 # trainloader = DataLoader(train_loader,batch_size=batch_size,num_workers=num_workers,pin_memory=True,shuffle=True)
 # testloader = DataLoader(test_loader,batch_size=batch_size,num_workers=num_workers,pin_memory=True)
-# Data
+
+# Test CIFAR10 Data
 print('==> Preparing data..')
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
@@ -129,20 +128,22 @@ testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_worke
 # Setup Model and summary
 model = Net().to(device)
 model = torch.nn.DataParallel(model, device_ids=range(torch.cuda.device_count()))
-summary(model,(3,32,32)) # summary 网络参数
+# summary(model,(3,32,32)) # summary 网络参数
 
-learning_list = list(filter(lambda p: p.requires_grad, model.parameters()))
+# 参数学习列表
+# learning_list = list(filter(lambda p: p.requires_grad, model.parameters()))
+learning_list = model.parameters()
 # 优化器以及学习率设置
 optimizer = SGD(learning_list, lr=learning_rate)
 # scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
 scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.5 * end_iter), int(0.75 * end_iter)], gamma=0.1)
-loss_class = nn.CrossEntropyLoss(reduction='elementwise_mean').to(device)
+# loss_class = nn.CrossEntropyLoss()#reduction='elementwise_mean').to(device)
 
 
 flag = True
 best_acc = 0.0
 i = start_iter
-
+# 记录器
 loss_meter = averageMeter()
 time_meter = averageMeter()
 class_acc_meter = averageMeter()
@@ -151,22 +152,18 @@ while i <= end_iter and flag:
 	for (images, gt) in trainloader:
 		i += 1
 
-		start_ts = time.time()
-		scheduler.step()
+		start_ts = time.time()	
 		model.train()
-		images = images.to(device)
-		gt = gt.to(device)
+		images,gt = images.to(device),gt.to(device)
 		# gt_class = gt[:,:1].long()
 		# 优化器置0
 		optimizer.zero_grad()
-		# 多输出
 		out_class = model(images)
-		loss = loss_class(out_class,gt)
-		# loss = loss_class(out_class,gt_class.squeeze(1))
+		loss = F.cross_entropy(out_class, gt)
 
-		# loss bp
 		loss.backward()
 		optimizer.step()
+		# scheduler.step()
 
 		time_meter.update(time.time() - start_ts)
 		# 每print_interval显示一次
@@ -180,19 +177,16 @@ while i <= end_iter and flag:
 			model.eval()
 			with torch.no_grad():
 				for i_te, (images_te, gt_te) in tqdm(enumerate(testloader)):
-					images_te = images_te.to(device)
-					gt_te = gt_te.to(device)
+					images_te,gt_te  = images_te.to(device),gt_te.to(device)
 					# gt_class = gt[:,:1].long()
 
 					out_class = model(images_te)
-					loss = loss_class(out_class,gt_te)
+					# loss = loss_class(out_class,gt_te)
+					loss = F.cross_entropy(out_class, gt_te)
 					# loss = loss_class(out_class,gt_class.squeeze(1))
-					class_acc = compute_class_acc(out_class,gt_te)
+					class_acc = compute_class_acc(out_class,gt_te)/float(batch_size)
 					# class_acc = compute_class_acc(out_class,gt_class.squeeze(1))
-
-					class_acc = class_acc/float(batch_size)
 					# class_acc,mean_IoU = compute_acc(clas,coor,gt_te)
-
 					class_acc_meter.update(class_acc)
 					loss_meter.update(loss.item())
 			print("Iter %d Loss: %.4f classification acc:%.4f" % (i + 1,loss_meter.avg,class_acc_meter.avg))

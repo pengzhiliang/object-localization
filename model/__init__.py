@@ -7,6 +7,7 @@ Created on Oct 31,2018
 
 from mobilenet import *
 from vgg import *
+from ssd import *
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -20,7 +21,7 @@ def get_mobilenet_model(pretain = True,num_classes = 5,requires_grad = False):
 
 	if pretain:
 		# Todo: load the pre-trained model for self.base_net, it will increase the accuracy by fine-tuning
-		basenet_state = torch.load("/home/pzl/object-localization/pretained/mobienetv2.pth")
+		basenet_state = torch.load("./pretrained/mobienetv2.pth")
 		# filter out unnecessary keys
 		model_dict = model.state_dict()
 		pretrained_dict = {k: v for k, v in basenet_state.items() if k in model_dict}
@@ -49,20 +50,21 @@ def get_vgg_model(vggname='VGG16',pretain = True,num_classes = 5,requires_grad =
 		return model
 
 class Net(nn.Module):
-	def __init__(self,netname):
+	def __init__(self,netname,freeze_basenet = False):
 		super(Net,self).__init__()
 		if netname[:3] == 'VGG':
-			self.base_net = get_vgg_model(netname)
+			self.base_net = get_vgg_model(netname,requires_grad = not freeze_basenet)
 			self.in_features = 512
 		else:
-			self.base_net = get_mobilenet_model()
+			self.base_net = get_mobilenet_model(requires_grad = not freeze_basenet)
 			self.in_features = 1024
+
 		# 预测四个坐标
 		self.model_reg = torch.nn.Sequential(
-			torch.nn.Linear(self.in_features, 512),
+			torch.nn.Linear(self.in_features, 256),
 			torch.nn.ReLU(),
 			torch.nn.Dropout(),
-			torch.nn.Linear(512, 128),
+			torch.nn.Linear(256, 128),
 			torch.nn.ReLU(),
 			torch.nn.Dropout(),
 			torch.nn.Linear(128, 4)
