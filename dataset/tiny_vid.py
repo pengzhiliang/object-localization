@@ -206,14 +206,14 @@ class tiny_vid_loader(data.Dataset):
         gt_bbox = np.array(self.class_coor[index][:-1],dtype = np.float32)
         img = Image.open(imgpath).convert('RGB')
         if  self.transform is not None:
-            gt_class , gt_bbox = self.ToTensor(gt_class),self.Tensor(gt_bbox)
+            gt_class , gt_bbox = torch.LongTensor(gt_class),torch.Tensor(gt_bbox)
             if self.mode:
                 img , gt_bbox = self.random_flip(img,gt_bbox)
                 img, gt_bbox, gt_class = self.random_crop(img, gt_bbox, gt_class)
             img = self.ToTensor(img)
             img = self.Normalize(img)
         else:
-            img,gt_class , gt_bbox = self.ToTensor(img),self.ToTensor(gt_class),self.Tensor(gt_bbox)
+            img,gt_class , gt_bbox = self.ToTensor(img),torch.LongTensor(gt_class),torch.Tensor(gt_bbox)
             img = self.Normalize(img)
         return img,gt_class,gt_bbox
 
