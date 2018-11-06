@@ -32,7 +32,7 @@ num_workers = 12
 resume_path = '/home/pzl/object-localization/checkpoint/best_model.pkl'
 resume_flag = True
 start_epoch = 0
-end_epoch = 300
+end_epoch = 1000
 test_interval = 1
 print_interval = 1
 
@@ -60,7 +60,7 @@ optimizer = SGD([
 					{'params': model.model_class.parameters(), 'lr': learning_rate * 10},
 					{'params': model.model_reg.parameters(), 'lr': learning_rate * 10}
 				], lr=learning_rate, momentum=0.9, weight_decay=5e-4)
-scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.4 * end_epoch), int(0.7 * end_epoch),int(0.85 * end_epoch)], gamma=0.1)
+scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.4 * end_epoch), int(0.7 * end_epoch),int(0.8 * end_epoch),int(0.9 * end_epoch)], gamma=0.1)
 # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=10, verbose=True)
 loss_class = nn.CrossEntropyLoss(reduction='elementwise_mean').to(device)
 loss_reg = nn.SmoothL1Loss(reduction='sum').to(device) # or MSELoss or L1Loss or SmoothL1Loss

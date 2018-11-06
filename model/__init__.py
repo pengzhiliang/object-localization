@@ -71,13 +71,13 @@ class Net(nn.Module):
 		)
 		# 预测分类
 		self.model_class = torch.nn.Sequential(
-			torch.nn.Linear(self.in_features, 1024),
+			torch.nn.Linear(self.in_features, 512),
 			torch.nn.ReLU(),
 			torch.nn.Dropout(),
-			torch.nn.Linear(1024,128),
+			torch.nn.Linear(512,32),
 			torch.nn.ReLU(),
 			torch.nn.Dropout(),
-			torch.nn.Linear(128, 5)
+			torch.nn.Linear(32, 5)
 		)
 	def forward(self,x):
 		out = self.base_net(x) 					#out: (n,in_features,4,4)
