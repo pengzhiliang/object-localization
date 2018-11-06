@@ -26,14 +26,14 @@ from dataset import tiny_vid_loader,xywh_to_x1y1x2y2, x1y1x2y2_to_xywh
 
 # 参数设置
 defualt_path = '/home/pzl/Data/tiny_vid'
-learning_rate = 1e-5
+learning_rate = 1e-3
 batch_size = 50
 num_workers = 12
 resume_path = '/home/pzl/object-localization/checkpoint/best_model.pkl'
 resume_flag = True
 start_epoch = 0
-end_epoch = 500
-test_interval = 5
+end_epoch = 300
+test_interval = 1
 print_interval = 1
 
 # GPU or CPU
@@ -60,10 +60,10 @@ optimizer = SGD([
 					{'params': model.model_class.parameters(), 'lr': learning_rate * 10},
 					{'params': model.model_reg.parameters(), 'lr': learning_rate * 10}
 				], lr=learning_rate, momentum=0.9, weight_decay=5e-4)
-scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.5 * end_epoch), int(0.75 * end_epoch)], gamma=0.1)
+scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.4 * end_epoch), int(0.7 * end_epoch),int(0.85 * end_epoch)], gamma=0.1)
 # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=10, verbose=True)
 loss_class = nn.CrossEntropyLoss(reduction='elementwise_mean').to(device)
-loss_reg = nn.SmoothL1Loss(reduction='elementwise_mean').to(device) # or MSELoss or L1Loss or SmoothL1Loss
+loss_reg = nn.SmoothL1Loss(reduction='sum').to(device) # or MSELoss or L1Loss or SmoothL1Loss
 
 # resume 
 if (os.path.isfile(resume_path) and resume_flag):
@@ -92,14 +92,12 @@ def train(epoch,display=True):
 	for batch_idx, (inputs, targets_class,targets_reg) in enumerate(trainloader):
 		inputs, targets_class,targets_reg = inputs.to(device), targets_class.to(device),targets_reg.to(device).float()
 		optimizer.zero_grad()
+		# 预测的为物体中心及宽高
 		outputs_reg,outputs_class = model(inputs)
-
 		targets_reg = x1y1x2y2_to_xywh(targets_reg/128.)
-		# targets_class = (targets[:,:1].long()).squeeze(1)
-		# targets_reg = x1y1x2y2_to_xywh((targets[:,1:].float())/128.)
-
 		c_loss = loss_class(outputs_class, targets_class)
-		r_loss = loss_reg(outputs_reg, targets_reg)*10
+		# print('out:',targets_reg.data)
+		r_loss = loss_reg(outputs_reg, targets_reg)
 		loss = c_loss + r_loss
 		loss.backward()
 		optimizer.step()
@@ -107,11 +105,11 @@ def train(epoch,display=True):
 		train_class_loss += c_loss.item()
 		train_reg_loss += r_loss.item()
 
-		class_acc,batch_IoU = compute_iou_acc(outputs_class,targets_class,outputs_reg,targets_reg,theta=0.5)
+		class_acc,batch_IoU = compute_iou_acc(outputs_class,targets_class,xywh_to_x1y1x2y2(outputs_reg),xywh_to_x1y1x2y2(targets_reg))
 		total += targets_reg.size(0)
 		correct += class_acc
 		IoU += batch_IoU
-	if display:
+		if display:
 			# progress_bar(batch_idx, len(trainloader), 'Total Loss: %.4f|C_Loss: %.4f|R_loss: %.4f|M_Iou :%.4f |Acc: %.4f%% (%d/%d)'
 			# 		 % ((train_class_loss+train_reg_loss)/(batch_idx+1),train_class_loss/(batch_idx+1),train_reg_loss/(batch_idx+1),IoU/total, 100.*correct/total, correct, total))
 			print('Total Loss: %.4f|C_Loss: %.4f|R_loss: %.4f|M_Iou :%.4f |Acc: %.4f%% (%d/%d)'
@@ -136,18 +134,16 @@ def test(epoch,display=True):
 			outputs_reg,outputs_class = model(inputs)
 
 			targets_reg = x1y1x2y2_to_xywh(targets_reg/128.)
-			# targets_class = (targets[:,:1].long()).squeeze(1)
-			# targets_reg = x1y1x2y2_to_xywh((targets[:,1:].float())/128.)
 
 			c_loss = loss_class(outputs_class, targets_class)
-			r_loss = loss_reg(outputs_reg, targets_reg)*10
+			r_loss = loss_reg(outputs_reg, targets_reg)
 			loss = c_loss + r_loss
 
 			test_class_loss += c_loss.item()
 			test_reg_loss += r_loss.item()
 
 			# _, predicted = outputs_class.max(dim=1)
-			class_acc,batch_IoU = compute_iou_acc(outputs_class,targets_class,outputs_reg,targets_reg,theta=0.5)
+			class_acc,batch_IoU = compute_iou_acc(outputs_class,targets_class,xywh_to_x1y1x2y2(outputs_reg),xywh_to_x1y1x2y2(targets_reg))
 			total += targets_reg.size(0)
 			correct += class_acc
 			IoU += batch_IoU

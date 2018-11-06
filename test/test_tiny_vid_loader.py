@@ -31,11 +31,12 @@ if __name__ == '__main__':
     trainloader = data.DataLoader(dst, batch_size=1)
     for i, (img, gt_class,gt_bbox) in enumerate(trainloader):
         if i % 150 == 0:
-            print(gt_class)
-            print(gt_bbox)
-            print(img)
+ 
             gt_class=gt_class.data.numpy()
-            gt_bbox = gt_bbox.data.numpy()[0]
+            gt_bbox = gt_bbox.squeeze()
+            # print('4',gt_class)
+            print('4',gt_bbox)
+            # print(img)
             inp = img.numpy()[0].transpose((1, 2, 0))
             mean = np.array([0.485, 0.456, 0.406])
             std = np.array([0.229, 0.224, 0.225])
@@ -43,6 +44,6 @@ if __name__ == '__main__':
             # np.clip(inp,0,1) inp中比0小的设为0，比1大设为1
             inp = np.clip(inp, 0, 1)*255
             inp = Image.fromarray(inp.astype('uint8')).convert('RGB')
-            dis_gt(inp,target_classes[gt_class],gt_bbox)
+            dis_gt(inp,target_classes[int(gt_class)],gt_bbox)
 
             break

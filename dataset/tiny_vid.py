@@ -103,7 +103,7 @@ class tiny_vid_loader(data.Dataset):
     """
     img_size =128
 
-    def __init__(self,defualt_path='/home/pzl/Data/tiny_vid',mode='train',transform=None):
+    def __init__(self,defualt_path='/home/pzl/Data/tiny_vid',mode='train',transform='some augmentation'):
         """
         defualt_path: 如'/home/pzl/Data/tiny_vid'
         mode : 'train' or 'test'
@@ -162,7 +162,8 @@ class tiny_vid_loader(data.Dataset):
           labels: (tensor) selected bbox labels.
         '''
         imw, imh = img.size
-        boxes = torch.squeeze(boxes,dim=0) # expand [1,4]
+        boxes = torch.unsqueeze(boxes,dim=0) # expand [1,4]
+        # print(boxes)
         while True:
             min_iou = random.choice([None, 0.1, 0.3, 0.5, 0.7, 0.9])
             if min_iou is None:
@@ -198,24 +199,31 @@ class tiny_vid_loader(data.Dataset):
                 selected_boxes[:,1].add_(-y).clamp_(min=0, max=h)
                 selected_boxes[:,2].add_(-x).clamp_(min=0, max=w)
                 selected_boxes[:,3].add_(-y).clamp_(min=0, max=h)
-                return img, selected_boxes, labels[mask]
+                # print(selected_boxes, mask)
+                return img, selected_boxes, labels#labels[mask]
 
     def __getitem__(self, index):
         imgpath = self.filelist[index]
-        gt_class = np.array(self.class_coor[index][-1],dtype = np.int64)
+        gt_class = np.array(self.class_coor[index][-1],dtype = np.float32)
         gt_bbox = np.array(self.class_coor[index][:-1],dtype = np.float32)
+        # print('1:',gt_bbox)
         img = Image.open(imgpath).convert('RGB')
         if  self.transform is not None:
-            gt_class , gt_bbox = torch.LongTensor(gt_class),torch.Tensor(gt_bbox)
+            gt_class , gt_bbox = torch.Tensor(gt_class),torch.Tensor(gt_bbox)
+            # print('2:',gt_class)
             if self.mode:
                 img , gt_bbox = self.random_flip(img,gt_bbox)
                 img, gt_bbox, gt_class = self.random_crop(img, gt_bbox, gt_class)
+                w,h = img.size 
+                gt_bbox /= torch.Tensor([w,h,w,h]).expand_as(gt_bbox)
+                # print('3:',gt_bbox*128)
+                img = transforms.Resize((128,128))(img)
             img = self.ToTensor(img)
             img = self.Normalize(img)
         else:
-            img,gt_class , gt_bbox = self.ToTensor(img),torch.LongTensor(gt_class),torch.Tensor(gt_bbox)
+            img,gt_class , gt_bbox = self.ToTensor(img),torch.Tensor(gt_class),torch.Tensor(gt_bbox/128.)
             img = self.Normalize(img)
-        return img,gt_class,gt_bbox
+        return img,gt_class.long(),(gt_bbox*128).squeeze()
 
     def __len__(self):
         return len(self.filelist)
@@ -287,7 +295,7 @@ class ListDataset(data.Dataset):
             img, boxes, labels = self.random_crop(img, boxes, labels)
 
         # Scale bbox locaitons to [0,1].
-        w,h = img.size #(128,128)
+        w,h = img.size 
         boxes /= torch.Tensor([w,h,w,h]).expand_as(boxes)
 
         img = img.resize((self.img_size,self.img_size))
