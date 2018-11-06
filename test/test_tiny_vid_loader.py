@@ -21,9 +21,9 @@ from torchvision import transforms
 from os.path import join as pjoin
 
 import sys
-sys.path.insert(0,'../dataset/')
+# sys.path.insert(0,'../dataset/')
 sys.path.insert(0,'../')
-from tiny_vid import *
+from dataset.tiny_vid import *
 
 if __name__ == '__main__':
     target_classes = ['car', 'bird', 'turtle', 'dog', 'lizard']
