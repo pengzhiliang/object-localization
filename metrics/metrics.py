@@ -55,8 +55,8 @@ def compute_iou_acc(in_class,gt_class,in_coor,gt_coor,theta=0.5):
     mean_IoU = IoU.sum().item()
     if len(in_class.size()) == 1:
         # background class = 0
-        # print(in_class,IoU,gt_class)
-        in_class[IoU<theta] = 100
+        # print(IoU,'\n',in_class,'\n',gt_class,'\n',in_coor,'\n',gt_coor)
+        # in_class[IoU<theta] = 100
         class_acc = in_class.eq(gt_class).sum().item()
     else:
         _,pred_class = in_class.max(dim =1) # pred_class :(n,),取值0~4

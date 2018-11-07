@@ -26,14 +26,14 @@ from dataset import tiny_vid_loader,xywh_to_x1y1x2y2, x1y1x2y2_to_xywh
 
 # 参数设置
 defualt_path = '/home/pzl/Data/tiny_vid'
-learning_rate = 1e-3
+learning_rate = 1e-7
 batch_size = 50
 num_workers = 12
 resume_path = '/home/pzl/object-localization/checkpoint/best_model.pkl'
 resume_flag = True
 start_epoch = 0
 end_epoch = 1000
-test_interval = 1
+test_interval = 10
 print_interval = 1
 
 # GPU or CPU
@@ -59,7 +59,7 @@ optimizer = SGD([
 					{'params': model.base_net.parameters(),'lr': learning_rate / 10},
 					{'params': model.model_class.parameters(), 'lr': learning_rate * 10},
 					{'params': model.model_reg.parameters(), 'lr': learning_rate * 10}
-				], lr=learning_rate, momentum=0.9, weight_decay=5e-4)
+				], lr=learning_rate, momentum=0.99, weight_decay=5e-4)
 scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[int(0.4 * end_epoch), int(0.7 * end_epoch),int(0.8 * end_epoch),int(0.9 * end_epoch)], gamma=0.1)
 # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',patience=10, verbose=True)
 loss_class = nn.CrossEntropyLoss(reduction='elementwise_mean').to(device)
@@ -185,101 +185,6 @@ for epoch in range(start_epoch, end_epoch):
 		test_acc.append(acc)
 		scheduler.step(loss)
     # print(train_loss[-1],train_acc[-1],test_loss[-1],test_acc[-1])
-
-
-# flag = True
-# best_acc = 0.0
-# i = start_epoch
-
-# loss_meter = averageMeter()
-# time_meter = averageMeter()
-# class_acc_meter = averageMeter()
-# mean_IoU_meter = averageMeter()
-
-# while i <= end_epoch and flag:
-# 	for (images, gt) in trainloader:
-# 		i += 1
-
-# 		start_ts = time.time()
-# 		scheduler.step()
-# 		model.train()
-# 		images = images.to(device)
-# 		gt = gt.to(device)
-# 		gt_class = gt[:,:1].long()
-# 		gt_reg = (gt[:,1:]/128.).float()
-# 		# 优化器置0
-# 		optimizer.zero_grad()
-# 		# 多输出
-# 		out_reg,out_class = model(images)
-# 		r_loss = loss_reg(out_reg,gt_reg)#
-# 		c_loss = loss_class(out_class,gt_class.squeeze(1))
-# 		loss = r_loss+c_loss
-# 		# for test
-# 		# print(out_class.data.max(dim=1)[1])
-# 		# print(gt_class.squeeze(1))
-# 		# print(c_loss.data)
-# 		# loss bp
-# 		loss.backward()
-# 		optimizer.step()
-
-# 		time_meter.update(time.time() - start_ts)
-# 		# 每print_interval显示一次
-# 		if (i + 1) % print_interval == 0:
-# 			fmt_str = "Iter [{:d}/{:d}]  regress loss:{:.4f},classification loss:{:.4f} Total Loss:{:.4f}  Time/Image:{:.4f}"
-# 			print_str = fmt_str.format(i + 1,end_epoch,r_loss.item(),c_loss.item(),loss.item(),time_meter.avg / batch_size)
-# 			print(print_str)
-# 			time_meter.reset()
-# 		# 每test_interval test一次
-# 		if (i + 1) % test_interval == 0 or (i + 1) == end_epoch:
-# 			model.eval()
-# 			with torch.no_grad():
-# 				for i_te, (images_te, gt_te) in tqdm(enumerate(testloader)):
-# 					images_te = images_te.to(device)
-# 					gt_te = gt_te.to(device)
-# 					gt_class = gt[:,:1].long()
-# 					gt_reg = (gt[:,1:]/128.).float()
-
-# 					out_reg,out_class = model(images_te)
-# 					r_loss = loss_reg(out_reg,gt_reg)
-# 					c_loss = loss_class(out_class,gt_class.squeeze(1))
-# 					loss = r_loss+c_loss
-
-# 					class_acc = compute_class_acc(out_class,gt_class.squeeze(1))
-# 					IoU = compute_IoU(out_reg,gt_reg)
-# 					mean_IoU = IoU.sum()/batch_size
-# 					class_acc = class_acc/float(batch_size)
-# 					# class_acc,mean_IoU = compute_acc(clas,coor,gt_te)
-
-# 					class_acc_meter.update(class_acc)
-# 					mean_IoU_meter.update(mean_IoU)
-# 					loss_meter.update(loss.item())
-# 			# print(class_acc,IoU)
-# 			print("Iter %d Loss: %.4f classification acc:%.4f Mean Iou:%.4f" % (i + 1,loss_meter.avg,class_acc_meter.avg,mean_IoU_meter.avg))
-
-
-
-# 			if class_acc_meter.avg > best_acc:
-# 				best_acc = class_acc_meter.avg
-# 				state = {
-# 				    "epoch": i + 1,
-# 				    "model_state": model.state_dict(),
-# 				    "optimizer_state": optimizer.state_dict(),
-# 				    "scheduler_state": scheduler.state_dict(),
-# 				    "best_acc": best_acc,
-# 				}
-# 				save_path = os.path.join(os.path.split(resume_path)[0],"best_model.pkl")
-# 				print("saving......")
-# 				torch.save(state, save_path)
-
-# 			class_acc_meter.reset()
-# 			mean_IoU_meter.reset()
-# 			loss_meter.reset()
-
-# 		if (i + 1) == end_epoch:
-# 			flag = False
-# 			break
-
-
 
 
 

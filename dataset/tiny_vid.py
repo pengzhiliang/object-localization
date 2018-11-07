@@ -124,6 +124,55 @@ class tiny_vid_loader(data.Dataset):
         self.data_encoder = DataEncoder()
         self.transform = transform
 
+    def random_distort( self,
+        img,
+        brightness_delta=32/255.,
+        contrast_delta=0.5,
+        saturation_delta=0.5,
+        hue_delta=0.1):
+        '''A color related data augmentation used in SSD.
+
+        Args:
+          img: (PIL.Image) image to be color augmented.
+          brightness_delta: (float) shift of brightness, range from [1-delta,1+delta].
+          contrast_delta: (float) shift of contrast, range from [1-delta,1+delta].
+          saturation_delta: (float) shift of saturation, range from [1-delta,1+delta].
+          hue_delta: (float) shift of hue, range from [-delta,delta].
+
+        Returns:
+          img: (PIL.Image) color augmented image.
+        '''
+        def brightness(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(brightness=delta)(img)
+            return img
+
+        def contrast(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(contrast=delta)(img)
+            return img
+
+        def saturation(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(saturation=delta)(img)
+            return img
+
+        def hue(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(hue=delta)(img)
+            return img
+
+        img = brightness(img, brightness_delta)
+        if random.random() < 0.5:
+            img = contrast(img, contrast_delta)
+            img = saturation(img, saturation_delta)
+            img = hue(img, hue_delta)
+        else:
+            img = saturation(img, saturation_delta)
+            img = hue(img, hue_delta)
+            img = contrast(img, contrast_delta)
+        return img
+
     def random_flip(self, img, boxes):
         '''Randomly flip the image and adjust the bbox locations.
         只在水平方向翻转
@@ -146,6 +195,7 @@ class tiny_vid_loader(data.Dataset):
             boxes[0] = xmin
             boxes[2] = xmax
         return img, boxes
+
     def random_crop(self, img, boxes, labels):
         '''Randomly crop the image and adjust the bbox locations.
 
@@ -212,6 +262,7 @@ class tiny_vid_loader(data.Dataset):
             gt_class , gt_bbox = torch.Tensor(gt_class),torch.Tensor(gt_bbox)
             # print('2:',gt_class)
             if self.mode:
+                img = self.random_distort(img)
                 img , gt_bbox = self.random_flip(img,gt_bbox)
                 img, gt_bbox, gt_class = self.random_crop(img, gt_bbox, gt_class)
                 w,h = img.size 
@@ -291,6 +342,7 @@ class ListDataset(data.Dataset):
 
         # Data augmentation while training.
         if self.train:
+            img =self.random_distort(img)
             img, boxes = self.random_flip(img, boxes)
             img, boxes, labels = self.random_crop(img, boxes, labels)
 
@@ -304,6 +356,55 @@ class ListDataset(data.Dataset):
         # Encode loc & conf targets.
         loc_target, conf_target = self.data_encoder.encode(boxes, labels)
         return img, loc_target, conf_target,boxes,labels
+
+    def random_distort(self,
+        img,
+        brightness_delta=32/255.,
+        contrast_delta=0.5,
+        saturation_delta=0.5,
+        hue_delta=0.1):
+        '''A color related data augmentation used in SSD.
+
+        Args:
+          img: (PIL.Image) image to be color augmented.
+          brightness_delta: (float) shift of brightness, range from [1-delta,1+delta].
+          contrast_delta: (float) shift of contrast, range from [1-delta,1+delta].
+          saturation_delta: (float) shift of saturation, range from [1-delta,1+delta].
+          hue_delta: (float) shift of hue, range from [-delta,delta].
+
+        Returns:
+          img: (PIL.Image) color augmented image.
+        '''
+        def brightness(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(brightness=delta)(img)
+            return img
+
+        def contrast(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(contrast=delta)(img)
+            return img
+
+        def saturation(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(saturation=delta)(img)
+            return img
+
+        def hue(img, delta):
+            if random.random() < 0.5:
+                img = transforms.ColorJitter(hue=delta)(img)
+            return img
+
+        img = brightness(img, brightness_delta)
+        if random.random() < 0.5:
+            img = contrast(img, contrast_delta)
+            img = saturation(img, saturation_delta)
+            img = hue(img, hue_delta)
+        else:
+            img = saturation(img, saturation_delta)
+            img = hue(img, hue_delta)
+            img = contrast(img, contrast_delta)
+        return img
 
     def random_flip(self, img, boxes):
         '''Randomly flip the image and adjust the bbox locations.

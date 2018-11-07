@@ -1,9 +1,11 @@
+#-*-coding:utf-8-*-
 '''Encode target locations and labels.'''
+from __future__ import print_function
 import torch
 
 import math
 import itertools
-
+import numpy as np
 
 class DataEncoder:
     def __init__(self):
@@ -128,45 +130,54 @@ class DataEncoder:
         Ref:
           https://github.com/rbgirshick/py-faster-rcnn/blob/master/lib/nms/py_cpu_nms.py
         '''
-        x1 = bboxes[:,0]
-        y1 = bboxes[:,1]
-        x2 = bboxes[:,2]
-        y2 = bboxes[:,3]
+        try:
+            x1 = bboxes[:,0]
+            y1 = bboxes[:,1]
+            x2 = bboxes[:,2]
+            y2 = bboxes[:,3]
+        except Exception as e:
+            print(bboxes)
+            raise IndexError
 
+        # 每一个候选框的面积
         areas = (x2-x1) * (y2-y1)
+        # order是按照score降序排序的
         _, order = scores.sort(0, descending=True)
 
         keep = []
         while order.numel() > 0:
             i = order[0]
+            # 概率最大的保留
             keep.append(i)
-
+            # 剩下最后一个则退出
             if order.numel() == 1:
                 break
-
+            # 计算当前概率最大矩形框与其他矩形框的相交框的坐标
             xx1 = x1[order[1:]].clamp(min=x1[i])
             yy1 = y1[order[1:]].clamp(min=y1[i])
             xx2 = x2[order[1:]].clamp(max=x2[i])
             yy2 = y2[order[1:]].clamp(max=y2[i])
-
+            # 计算相交框的面积,注意矩形框不相交时w或h算出来会是负数，用0代替
             w = (xx2-xx1).clamp(min=0)
             h = (yy2-yy1).clamp(min=0)
             inter = w*h
 
             if mode == 'union':
+                # 计算重叠度IOU：重叠面积/（面积1+面积2-重叠面积)
                 ovr = inter / (areas[i] + areas[order[1:]] - inter)
             elif mode == 'min':
                 ovr = inter / areas[order[1:]].clamp(max=areas[i])
             else:
                 raise TypeError('Unknown nms mode: %s.' % mode)
-
+            # 找到重叠度不高于阈值的矩形框索引
             ids = (ovr<=threshold).nonzero().squeeze()
             if ids.numel() == 0:
                 break
             order = order[ids+1]
+        # print(keep)
         return torch.LongTensor(keep)
 
-    def decode(self, loc, conf,threshold=0.5):
+    def _decode(self, loc, conf,threshold=0.5):
         '''Transform predicted loc/conf back to real bbox locations and class labels.
 
         Args:
@@ -183,54 +194,105 @@ class DataEncoder:
         boxes = torch.cat([cxcy-wh/2, cxcy+wh/2], 1)  # [8732,4]
 
         max_conf, labels = conf.max(dim=1)  # value:(8732,) index:(8732)
-        # print(max_conf,labels,labels.nonzero().size())
+        #(8732,) (8732,) (7716, 1) 即非背景的有7716组
+        # print('max_conf, labels, labels.nonzero size:',max_conf.size(),labels.size(),labels.nonzero().size())
         try:    
-            ids = labels.nonzero().squeeze(1)  # [#boxes,]
+            ids = labels.nonzero().squeeze()  # [#boxes,]
             # print(ids)
         except Exception as e:
-            ids = torch.LongTensor([0])
-        keep = self.nms(boxes[ids], max_conf[ids],threshold=threshold)
+            ids = torch.LongTensor([1])
+        keep = self.nms(boxes[ids], max_conf[ids],threshold=threshold)# len(keep)=2005,NMS后还留下2005组
+        # (2069, 4) (2069,) (2069,)
         # print(boxes[ids][keep].size(), labels[ids][keep].size(), max_conf[ids][keep].size())
-        if boxes[ids][keep].size(0) == 1:
-            return boxes[ids][keep], labels[ids][keep], max_conf[ids][keep]
-        return boxes[ids][keep][0], labels[ids][keep][0], max_conf[ids][keep][0]
-    # def decode(self, loc_preds, cls_preds, score_thresh=0.6, nms_thresh=0.45):
-    #     '''Decode predicted loc/cls back to real box locations and class labels.
-    #     Args:
-    #       loc_preds: (tensor) predicted loc, sized [8732,4].
-    #       cls_preds: (tensor) predicted conf, sized [8732,21].
-    #       score_thresh: (float) threshold for object confidence score.
-    #       nms_thresh: (float) threshold for box nms.
-    #     Returns:
-    #       boxes: (tensor) bbox locations, sized [#obj,4].
-    #       labels: (tensor) class labels, sized [#obj,].
-    #     '''
-    #     variances = (0.1, 0.2)
-    #     xy = loc_preds[:,:2] * variances[0] * self.default_boxes[:,2:] + self.default_boxes[:,:2]
-    #     wh = torch.exp(loc_preds[:,2:]*variances[1]) * self.default_boxes[:,2:]
-    #     box_preds = torch.cat([xy-wh/2, xy+wh/2], 1)
+        # print(boxes[ids][keep],labels[ids])
 
-    #     boxes = []
-    #     labels = []
-    #     scores = []
-    #     num_classes = cls_preds.size(1)
-    #     for i in range(num_classes-1):
-    #         score = cls_preds[:,i+1]  # class i corresponds to (i+1) column
-    #         mask = score > score_thresh
-    #         if not mask.any():
-    #             continue
-    #         box = box_preds[mask.nonzero().squeeze()]
-    #         score = score[mask]
+        # if boxes[ids][keep].size(0) == 1:
+            # print(boxes[ids][keep])
+            # return boxes[ids][keep], labels[ids][keep], max_conf[ids][keep]
 
-    #         keep = self.nms(box, score, nms_thresh)
-    #         boxes.append(box[keep])
-    #         labels.append(torch.LongTensor(len(box[keep])).fill_(i))
-    #         scores.append(score[keep])
-    #     # ([tensor([[0.2015, 0.2993, 0.8239, 0.6976]])], [tensor([2])], [tensor([0.9855])])
-    #     # boxes = torch.cat(boxes, 0)
-    #     # labels = torch.cat(labels, 0)
-    #     # scores = torch.cat(scores, 0)
-    #     index = scores.index(max(scores))
-    #     print(boxes[index],labels[index],scores[index])
-    #     return boxes[index].squeeze(), labels[index], scores[index]
+        # print('fin :',boxes[ids][keep][0], labels[ids][keep][0], max_conf[ids][keep][0])
+        # print(max_conf[ids][keep])
+        # print(labels[ids][keep])
+        # print(boxes[ids][keep])
+        # _,index = max_conf[ids][keep].max()
+        # print('max conf:\n',max_conf[ids][keep][index],'bbox:\n',boxes[ids][keep][index],'labels:\n',labels[ids][keep][index])
+        print('pred label:',labels[ids][keep[0]])
+        return boxes[ids][keep[0]], labels[ids][keep[0]], max_conf[ids][keep[0]]
 
+
+    def decode(self, loc_preds, cls_preds, score_thresh=0.6, nms_thresh=0.45):
+        '''Transform predicted loc/conf back to real bbox locations and class labels.
+
+        Args:
+          loc: (tensor) predicted loc, sized [8732,4].
+          conf: (tensor) predicted conf, sized [8732,6].
+
+        Returns:
+          boxes: (tensor) bbox locations, sized [#obj, 4].
+          labels: (tensor) class labels, sized [#obj,1].
+        '''
+        variances = (0.1, 0.2)
+        xy = loc_preds[:,:2] * variances[0] * self.default_boxes[:,2:] + self.default_boxes[:,:2]
+        wh = torch.exp(loc_preds[:,2:]*variances[1]) * self.default_boxes[:,2:]
+        box_preds = torch.cat([xy-wh/2, xy+wh/2], 1)
+
+        boxes = []
+        labels = []
+        scores = []
+        num_classes = cls_preds.size(1) # 6
+        for i in range(num_classes-1): # (0,1,2,3,4)
+            score = cls_preds[:,i+1]  # 0为背景，故取值(1,2,3,4,5)对应5个种类
+            mask = score > score_thresh # tensor( dtype=torch.uint8)
+            if not mask.any(): # 全为0 conf即均比阈值小
+                continue
+            # mask.nonzero().squeeze() 返回不为0的Index。取出对应的box和score
+            box = box_preds[mask.nonzero().squeeze()]
+            score = score[mask]
+            if len(box.size()) == 1:
+                box =box.unsqueeze(0)
+            keep = self.nms(box, score, nms_thresh)
+            boxes.append(box[keep])
+            labels.append(torch.LongTensor(len(box[keep])).fill_(i))
+            scores.append(score[keep])
+
+        # print(boxes, labels, scores)
+        boxes = torch.cat(boxes, 0)
+        labels = torch.cat(labels, 0)
+        scores = torch.cat(scores, 0)
+        return boxes, labels, scores
+
+def batch_iou(a, b):  
+    # pairwise jaccard botween boxes a and boxes b
+    # box: [left, top, right, bottom]
+    lt = np.maximum(a[:, np.newaxis, :2], b[:, :2])
+    rb = np.minimum(a[:, np.newaxis, 2:], b[:, 2:])
+    inter = np.clip(rb - lt, 0, None)
+
+    area_i = np.prod(inter, axis=2)
+    area_a = np.prod(a[:, 2:] - a[:, :2], axis=1)
+    area_b = np.prod(b[:, 2:] - b[:, :2], axis=1)
+
+    area_u = area_a[:, np.newaxis] + area_b - area_i
+    return area_i / np.clip(area_u, 1e-7, None)  # shape: (len(a) x len(b))
+
+
+def nms(boxes, scores, nms_thresh=0.45, conf_thresh=0, topk=400, topk_after=50):
+    Keep = np.zeros(len(scores), dtype=bool)
+    idx =  (scores >= conf_thresh) & ((-scores).argsort().argsort() < topk)
+    if idx.sum() == 0:
+        return Keep
+
+    boxes = boxes[idx]
+    scores = scores[idx]
+
+    iou = batch_iou(boxes, boxes)
+    keep = np.zeros(len(scores), dtype=bool)
+    keep[scores.argmax()] = True
+    for i in scores.argsort()[::-1]:
+        if (iou[i, keep] < nms_thresh).all():
+            keep[i] = True
+            #if keep.sum() >= topk_after:
+            #    break
+
+    Keep[idx] = keep
+    return Keep
