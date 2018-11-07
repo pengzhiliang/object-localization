@@ -18,3 +18,5 @@ python eval.py
 ```bash
 python SSD_eval.py
 ```
+4. reference
+[pytorch-ssd300](https://github.com/kuangliu/torchcv)
