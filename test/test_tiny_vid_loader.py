@@ -15,22 +15,22 @@ import torch,os,sys,random,cv2
 import numpy as np
 from PIL import Image,ImageFont,ImageDraw
 from matplotlib import pyplot as plt
-from encoder import DataEncoder
 from torch.utils import data
 from torchvision import transforms
 from os.path import join as pjoin
 
 import sys
-# sys.path.insert(0,'../dataset/')
 sys.path.insert(0,'../')
 from dataset.tiny_vid import *
+from encoder import DataEncoder
+from display import dis_gt
 
 if __name__ == '__main__':
     target_classes = ['car', 'bird', 'turtle', 'dog', 'lizard']
     dst = tiny_vid_loader(transform = 'some augmentation')
     trainloader = data.DataLoader(dst, batch_size=1)
     for i, (img, gt_class,gt_bbox) in enumerate(trainloader):
-        if i % 150 == 0:
+        if i == 345 :
  
             gt_class=gt_class.data.numpy()
             gt_bbox = gt_bbox.squeeze()

@@ -260,39 +260,3 @@ class DataEncoder:
         labels = torch.cat(labels, 0)
         scores = torch.cat(scores, 0)
         return boxes, labels, scores
-
-def batch_iou(a, b):  
-    # pairwise jaccard botween boxes a and boxes b
-    # box: [left, top, right, bottom]
-    lt = np.maximum(a[:, np.newaxis, :2], b[:, :2])
-    rb = np.minimum(a[:, np.newaxis, 2:], b[:, 2:])
-    inter = np.clip(rb - lt, 0, None)
-
-    area_i = np.prod(inter, axis=2)
-    area_a = np.prod(a[:, 2:] - a[:, :2], axis=1)
-    area_b = np.prod(b[:, 2:] - b[:, :2], axis=1)
-
-    area_u = area_a[:, np.newaxis] + area_b - area_i
-    return area_i / np.clip(area_u, 1e-7, None)  # shape: (len(a) x len(b))
-
-
-def nms(boxes, scores, nms_thresh=0.45, conf_thresh=0, topk=400, topk_after=50):
-    Keep = np.zeros(len(scores), dtype=bool)
-    idx =  (scores >= conf_thresh) & ((-scores).argsort().argsort() < topk)
-    if idx.sum() == 0:
-        return Keep
-
-    boxes = boxes[idx]
-    scores = scores[idx]
-
-    iou = batch_iou(boxes, boxes)
-    keep = np.zeros(len(scores), dtype=bool)
-    keep[scores.argmax()] = True
-    for i in scores.argsort()[::-1]:
-        if (iou[i, keep] < nms_thresh).all():
-            keep[i] = True
-            #if keep.sum() >= topk_after:
-            #    break
-
-    Keep[idx] = keep
-    return Keep

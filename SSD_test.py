@@ -111,7 +111,6 @@ with torch.no_grad():
         class_acc,IoU = compute_iou_acc(labels,real_class,boxes.squeeze(),real_boxes)# background class = 0
         acc += class_acc
         mean_iou += IoU
-        print('Mean IoU: %.3f  Classificatin Acc: %.3f (%d/%d)' 
+    print('Mean IoU: %.3f  Classificatin Acc: %.3f (%d/%d)' 
                 %(mean_iou/(batch_idx+1),1.*acc/(batch_idx+1),acc,batch_idx+1))
-
 
