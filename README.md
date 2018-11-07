@@ -10,5 +10,11 @@
 * crop & resize
 
 3. 两种实现
-3.1. simple net 
-3.2. ssd
+* simple net 
+```bash
+python eval.py
+```
+* ssd
+```bash
+python SSD_eval.py
+```
